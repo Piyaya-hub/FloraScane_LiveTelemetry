@@ -8,7 +8,8 @@ Home telemetry card. No database write, calibration, inferred lux, battery data,
 agronomic interpretation occurs in this path. Database snapshots remain separate.
 
 Startup is disconnected with null readings and no device identity. Select a real
-advertised device in Settings. Discovery filters the exact service UUID; connection
+advertised device in Settings. Discovery shows nearby BLE devices, including older firmware that advertises no
+service UUID. Select the ESP32 by name or ID. Connection
 requires the exact service/characteristic and notification support. A connection
 alone means **awaiting first reading**. Valid packets set the local receivedAt and
 lastSampledAt; invalid packets set a data error without changing the last successful
@@ -153,3 +154,18 @@ suite passed all 80 tests. After adding an additional extreme-value compact-scre
 check, the Home widget file passed all four tests. The full suite emitted
 google_fonts download warnings but completed successfully. `git diff --check`
 also passed.
+
+## Discovery compatibility fix
+
+The pairing scan no longer filters by advertised UUID or device name. Older ESP32
+firmware can be discovered even when FF01 is absent from its advertisement. GATT
+FF01/FF02 and the eight-byte telemetry protocol are still checked after connection;
+discovery does not establish compatibility with arbitrary older firmware. Scan again
+is available in the pairing sheet; connection failures now remain visible after it closes.
+Bluetooth Classic-only firmware cannot be discovered by this BLE library.
+
+Discovery-fix validation: Flutter analysis passed with no issues. The BLE, discovery,
+Settings and existing screen regression run passed 38 tests. A subsequent run including
+the new 25-device compact pairing/retry/error test passed all seven discovery and
+Settings tests. Physical discovery with the previous ESP32 firmware still requires
+verification on the Android phone.

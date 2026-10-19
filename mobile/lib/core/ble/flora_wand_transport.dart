@@ -25,6 +25,9 @@ abstract class FloraWandTransport {
 }
 
 class FlutterBlueFloraWandTransport implements FloraWandTransport {
+  FlutterBlueFloraWandTransport({this.scanResults});
+
+  final Stream<List<ScanResult>>? scanResults;
   final _packets = StreamController<List<int>>.broadcast();
   final _disconnections = StreamController<void>.broadcast();
   BluetoothDevice? _device;
@@ -37,19 +40,16 @@ class FlutterBlueFloraWandTransport implements FloraWandTransport {
   Stream<void> get disconnections => _disconnections.stream;
   @override
   Stream<List<FloraWandDiscoveredDevice>> get discoveries =>
-      FlutterBluePlus.onScanResults.map(
+      (scanResults ?? FlutterBluePlus.onScanResults).map(
         (results) => results
-            .where(
-              (r) => r.advertisementData.serviceUuids.contains(
-                FloraWandGattUuids.serviceUuid,
-              ),
-            )
             .map(
               (r) => FloraWandDiscoveredDevice(
                 id: r.device.remoteId.str,
                 name: r.advertisementData.advName.isNotEmpty
                     ? r.advertisementData.advName
-                    : 'FloraWand',
+                    : r.device.platformName.isNotEmpty
+                    ? r.device.platformName
+                    : 'Unnamed BLE device',
                 rssi: r.rssi,
               ),
             )
@@ -57,7 +57,9 @@ class FlutterBlueFloraWandTransport implements FloraWandTransport {
       );
   @override
   Future<void> startScan(Duration timeout) => FlutterBluePlus.startScan(
-    withServices: [FloraWandGattUuids.serviceUuid],
+    // Advertising need not contain the services exposed by GATT. Older ESP32
+    // firmware may advertise only a name, or a different service. Let the user
+    // select real nearby devices; validate the telemetry service after connect.
     timeout: timeout,
   );
   @override
@@ -92,7 +94,11 @@ class FlutterBlueFloraWandTransport implements FloraWandTransport {
       }
     }
     if (_characteristic == null) {
-      throw StateError('FloraWand notification characteristic missing');
+      throw StateError(
+        'ESP32 found, but its firmware does not expose the required FloraWand '
+        'telemetry service (FF01) and notification characteristic (FF02). '
+        'Check the firmware UUIDs or upload the project firmware.',
+      );
     }
   }
 

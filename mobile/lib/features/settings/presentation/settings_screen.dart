@@ -39,6 +39,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             final colorScheme = Theme.of(context).colorScheme;
 
             return SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.8),
+                child: SingleChildScrollView(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Column(
@@ -46,46 +49,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.bluetooth_searching, color: AppColors.secondary, size: 22),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Nearby FloraWand Devices',
-                              style: AppTypography.headlineSmall.copyWith(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
+                        const Icon(Icons.bluetooth_searching, color: AppColors.secondary, size: 22),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(
+                          'Nearby BLE Devices',
+                          style: AppTypography.headlineSmall.copyWith(fontSize: 16, fontWeight: FontWeight.w700),
+                        )),
                         if (wandState.isScanning)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
+                          const SizedBox(width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2)),
                       ],
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Ensure your ESP32 FloraWand power switch is ON and within BLE range.',
+                      'Select your ESP32 by name or device ID. Other nearby BLE devices may also appear.',
                       style: AppTypography.bodySmall.copyWith(
                         color: colorScheme.onSurfaceVariant,
                         fontSize: 12,
                       ),
                     ),
                     const SizedBox(height: 16),
+                    if (!wandState.isScanning && !wandState.isConnecting)
+                      TextButton.icon(
+                        onPressed: () => ref.read(floraWandNotifierProvider.notifier).startScan(),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Scan again'),
+                      ),
                     if (devices.isEmpty)
                       Container(
                         padding: const EdgeInsets.all(24),
                         alignment: Alignment.center,
                         child: Text(
                           wandState.isScanning
-                              ? 'Searching for nearby FloraWand over BLE...'
-                              : (wandState.errorMessage ?? 'No FloraWand devices found nearby. Check power switch.'),
+                              ? 'Searching for nearby BLE devices...'
+                              : (wandState.errorMessage ?? 'No BLE devices found. Check ESP32 power, Bluetooth and Nearby Devices permission. On older Android phones, enable Location.'),
                           style: AppTypography.bodyMedium.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
@@ -126,22 +124,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               onPressed: isCurrent
                                   ? null
                                   : () async {
+                                      final notifier = ref.read(floraWandNotifierProvider.notifier);
+                                      final messenger = ScaffoldMessenger.of(this.context);
                                       Navigator.pop(ctx);
-                                      final success = await ref
-                                          .read(floraWandNotifierProvider.notifier)
-                                          .connect(dev);
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              success
-                                                  ? 'FloraWand paired and connected successfully!'
-                                                  : 'Failed to connect to ${dev.name}.',
-                                            ),
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
-                                        );
-                                      }
+                                      final success = await notifier.connect(dev);
+                                      if (!mounted) return;
+                                      messenger.hideCurrentSnackBar();
+                                      messenger.showSnackBar(SnackBar(
+                                        content: Text(success
+                                            ? 'Connected. Waiting for sensor telemetry.'
+                                            : (this.ref.read(floraWandNotifierProvider).errorMessage ?? 'Failed to connect to ${dev.name}.')),
+                                        behavior: SnackBarBehavior.floating,
+                                      ));
                                     },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: colorScheme.primaryContainer,
@@ -153,6 +147,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         },
                       ),
                   ],
+                ),
+              ),
                 ),
               ),
             );
@@ -493,7 +489,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               _showPairingModal(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Scanning for nearby FloraWand devices over BLE...'),
+                                  content: Text('Scanning for nearby BLE devices...'),
                                   behavior: SnackBarBehavior.floating,
                                 ),
                               );

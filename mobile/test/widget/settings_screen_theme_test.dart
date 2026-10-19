@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:florascan_1/core/ble/flora_wand_ble_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,7 +26,54 @@ class MockUserPreferencesRepository implements UserPreferencesRepository {
   Future<void> setPreference(String key, String value) async {}
 }
 
+class DiscoveryTestNotifier extends FloraWandNotifier {
+  int scanCount = 0;
+  @override
+  FloraWandState build() => FloraWandState(discoveredDevices: List.generate(25,
+    (i) => FloraWandDiscoveredDevice(id: 'device-$i', name: 'ESP32-$i', rssi: -60)));
+  @override
+  Future<void> startScan({Duration timeout = const Duration(seconds: 8)}) async {
+    scanCount++;
+  }
+  @override
+  Future<bool> connect(FloraWandDiscoveredDevice device) async {
+    state = state.copyWith(connectionState: FloraWandConnectionState.error,
+      errorMessage: 'Firmware UUID mismatch');
+    return false;
+  }
+}
+
 void main() {
+  testWidgets('pairing lists many devices, retries, and shows errors after closing', (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final notifier = DiscoveryTestNotifier();
+    await tester.pumpWidget(ProviderScope(overrides: [
+      floraWandNotifierProvider.overrideWith(() => notifier),
+      userPreferencesRepositoryProvider.overrideWithValue(MockUserPreferencesRepository()),
+    ], child: MaterialApp(theme: AppTheme.lightTheme, home: const SettingsScreen())));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Pair New Wand'));
+    await tester.tap(find.text('Pair New Wand'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nearby BLE Devices'), findsOneWidget);
+    expect(find.text('ESP32-0'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Scan again'));
+    await tester.pumpAndSettle();
+    expect(notifier.scanCount, 2);
+    await tester.ensureVisible(find.text('Pair & Connect').first);
+    await tester.tap(find.text('Pair & Connect').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Nearby BLE Devices'), findsNothing);
+    expect(find.text('Firmware UUID mismatch'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   group('SettingsScreen Theme & UI Elements Widget Tests', () {
     testWidgets('renders Display Theme options and intuitive icon before Operating Scale', (tester) async {
       final mockRepo = MockUserPreferencesRepository();
