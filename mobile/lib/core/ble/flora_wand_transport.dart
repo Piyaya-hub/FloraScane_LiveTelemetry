@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'flora_wand_state.dart';
+import 'flora_wand_value_receiver.dart';
 
 class FloraWandGattUuids {
   FloraWandGattUuids._();
@@ -33,7 +34,7 @@ class FlutterBlueFloraWandTransport implements FloraWandTransport {
   BluetoothDevice? _device;
   BluetoothCharacteristic? _characteristic;
   StreamSubscription<BluetoothConnectionState>? _connection;
-  StreamSubscription<List<int>>? _values;
+  FloraWandValueReceiver? _receiver;
   @override
   Stream<List<int>> get packets => _packets.stream;
   @override
@@ -108,22 +109,24 @@ class FlutterBlueFloraWandTransport implements FloraWandTransport {
   @override
   Future<void> subscribe() async {
     final characteristic = _characteristic!;
-    // onValueReceived emits reads and notifications, but does not replay cached data.
-    _values = characteristic.onValueReceived.listen(
-      _packets.add,
+    _receiver = FloraWandValueReceiver(
+      values: characteristic.onValueReceived,
+      readValue: characteristic.properties.read
+          ? () => characteristic.read(timeout: 4)
+          : null,
+      onPacket: _packets.add,
       onError: _packets.addError,
     );
     await characteristic.setNotifyValue(true);
-    // Wait for a notification. An initial read could replay an old cached sample.
+    _receiver?.start();
   }
 
   @override
   Future<void> read() async {
-    final characteristic = _characteristic;
-    if (characteristic == null || !characteristic.properties.read) {
+    if (_characteristic == null || !_characteristic!.properties.read) {
       throw StateError('Telemetry read unavailable');
     }
-    await characteristic.read(); // Delivered once via onValueReceived.
+    await _receiver?.readLatest();
   }
 
   @override
@@ -133,8 +136,8 @@ class FlutterBlueFloraWandTransport implements FloraWandTransport {
     _characteristic = null;
     await _connection?.cancel();
     _connection = null;
-    await _values?.cancel();
-    _values = null;
+    await _receiver?.dispose();
+    _receiver = null;
     await device?.disconnect();
   }
 
