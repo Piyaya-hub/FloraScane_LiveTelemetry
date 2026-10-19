@@ -156,8 +156,8 @@ class _ScanScreenState extends ConsumerState<ScanScreen> with WidgetsBindingObse
       try {
         final image = await controller.takePicture();
         final wandState = ref.read(floraWandNotifierProvider);
-        final telemetry = wandState.isConnected
-            ? TelemetryReading.fromCalibrated(wandState.telemetry)
+        final telemetry = wandState.hasLiveData && wandState.telemetry != null
+            ? TelemetryReading.fromCalibrated(wandState.telemetry!)
             : null;
 
         final result = await ref
@@ -196,8 +196,8 @@ class _ScanScreenState extends ConsumerState<ScanScreen> with WidgetsBindingObse
       }
 
       final wandState = ref.read(floraWandNotifierProvider);
-      final telemetry = wandState.isConnected
-          ? TelemetryReading.fromCalibrated(wandState.telemetry)
+      final telemetry = wandState.hasLiveData && wandState.telemetry != null
+          ? TelemetryReading.fromCalibrated(wandState.telemetry!)
           : null;
 
       final result = await ref

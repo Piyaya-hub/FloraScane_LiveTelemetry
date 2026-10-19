@@ -579,6 +579,9 @@ class _DiagnosisResultSheetState extends ConsumerState<DiagnosisResultSheet> {
 
                     const SizedBox(height: 16),
 
+                    if (telemetry == null)
+                      const Text('Calibrated telemetry unavailable'),
+                    if (telemetry != null) ...[
                     // 4. Surroundings Telemetry: 4 Wand Sensors
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -725,6 +728,7 @@ class _DiagnosisResultSheetState extends ConsumerState<DiagnosisResultSheet> {
 
                     const SizedBox(height: 18),
 
+                    ],
                     // 5. Prioritized Action Plan
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,

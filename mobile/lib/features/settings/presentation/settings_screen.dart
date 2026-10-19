@@ -85,7 +85,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         child: Text(
                           wandState.isScanning
                               ? 'Searching for nearby FloraWand over BLE...'
-                              : 'No FloraWand devices found nearby. Check power switch.',
+                              : (wandState.errorMessage ?? 'No FloraWand devices found nearby. Check power switch.'),
                           style: AppTypography.bodyMedium.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
@@ -303,7 +303,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             borderRadius: BorderRadius.circular(9999),
                           ),
                           child: Text(
-                            '${wandState.telemetry.batteryPercent}% PWR',
+                            'BLE',
                             style: AppTypography.labelUi.copyWith(
                               color: isDark ? colorScheme.onSecondaryContainer : AppColors.onSecondaryFixedVariant,
                               fontSize: 9,

@@ -15,42 +15,21 @@ final telemetryRepositoryProvider = Provider<TelemetryRepository>((ref) {
 });
 
 /// Infrequently fetched base SQLite database snapshot (on-demand/startup).
-final baseTelemetrySnapshotProvider = FutureProvider<FieldTelemetrySnapshot>((ref) async {
+final baseTelemetrySnapshotProvider = FutureProvider<FieldTelemetrySnapshot>((
+  ref,
+) async {
   final repository = ref.watch(telemetryRepositoryProvider);
   return repository.fetchLatestTelemetry();
 });
 
-/// Reactive provider delivering live field telemetry snapshot merged with FloraWand BLE.
-/// Evaluates synchronously in memory without blocking UI thread or querying SQLite on every BLE packet tick.
-final liveTelemetryProvider = Provider<AsyncValue<FieldTelemetrySnapshot>>((ref) {
-  final baseAsync = ref.watch(baseTelemetrySnapshotProvider);
-  final wandState = ref.watch(floraWandNotifierProvider);
+/// Existing database snapshot remains separate from uncalibrated hardware data.
+final liveTelemetryProvider = Provider<AsyncValue<FieldTelemetrySnapshot>>((
+  ref,
+) {
+  return ref.watch(baseTelemetrySnapshotProvider);
+});
 
-  return baseAsync.whenData((base) {
-    return FieldTelemetrySnapshot(
-      soilMoisturePercent: wandState.telemetry.soilMoisturePercent,
-      soilTemperatureCelsius: wandState.telemetry.temperatureCelsius,
-      soilConductivityEc: base.soilConductivityEc,
-      ambientHumidityPercent: wandState.telemetry.humidityPercent,
-      solarRadiationPar: wandState.telemetry.lightLux,
-      isWandConnected: wandState.isConnected,
-      wandBatteryPercent: wandState.telemetry.batteryPercent,
-      localInferenceLatencyMs: base.localInferenceLatencyMs,
-      activeAlerts: [
-        if (wandState.telemetry.isMoistureWarning)
-          AgronomyAlertItem(
-            id: 'wand_moist_alert',
-            title: 'Soil Moisture: ${wandState.telemetry.soilMoistureTag}',
-            description: wandState.telemetry.soilMoisturePercent < 25.0
-                ? 'Soil moisture is critically low. Root zone needs watering.'
-                : 'Soil is waterlogged. Reduce irrigation to prevent root rot.',
-            isUrgent: wandState.telemetry.soilMoisturePercent < 15.0,
-            timestamp: wandState.telemetry.timestamp,
-          )
-        else
-          ...base.activeAlerts,
-      ],
-      lastUpdated: wandState.lastSampledAt ?? base.lastUpdated,
-    );
-  });
+/// Synchronous hardware state; never gated by database loading or errors.
+final hardwareTelemetryProvider = Provider<FloraWandState>((ref) {
+  return ref.watch(floraWandNotifierProvider);
 });

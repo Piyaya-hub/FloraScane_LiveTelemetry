@@ -116,7 +116,7 @@ class _FloraScanHeaderState extends State<FloraScanHeader> {
                           ? AppColors.secondary
                           : (wandState.isScanning ? AppColors.tertiary : AppColors.error);
                       final text = isConnected
-                          ? 'Wand ${wandState.telemetry.batteryPercent}%'
+                          ? 'Wand connected'
                           : (wandState.isScanning ? 'Wand...' : 'Wand Off');
 
                       return Container(

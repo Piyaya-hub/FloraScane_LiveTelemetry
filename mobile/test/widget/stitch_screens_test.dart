@@ -383,7 +383,7 @@ void main() {
 
       // Assert (AAA Pattern)
       expect(find.text('App & Hardware Settings'), findsOneWidget);
-      expect(find.text('FloraWand Model S1'), findsOneWidget);
+      expect(find.text('No FloraWand connected'), findsOneWidget);
       expect(find.text('Guided Probe Calibration'), findsOneWidget);
       expect(find.text('Tomato (Solanum lycopersicum)'), findsOneWidget);
       expect(find.text('Daily Soil Inspection'), findsOneWidget);
@@ -412,8 +412,8 @@ void main() {
 
       // Assert (AAA Pattern)
       expect(tester.takeException(), isNull);
-      expect(find.text('FloraWand Model S1'), findsOneWidget);
-      expect(find.text('92% PWR'), findsOneWidget);
+      expect(find.text('No FloraWand connected'), findsOneWidget);
+      expect(find.text('92% PWR'), findsNothing);
     });
 
     testWidgets('SettingsScreen renders without RenderFlex overflow on narrow viewport (360x640)', (tester) async {
@@ -439,8 +439,8 @@ void main() {
 
       // Assert (AAA Pattern)
       expect(tester.takeException(), isNull);
-      expect(find.text('FloraWand Model S1'), findsOneWidget);
-      expect(find.text('92% PWR'), findsOneWidget);
+      expect(find.text('No FloraWand connected'), findsOneWidget);
+      expect(find.text('92% PWR'), findsNothing);
     });
 
     testWidgets('SettingsScreen renders without RenderFlex overflow on ultra-compact viewport (320x568)', (tester) async {
@@ -466,8 +466,8 @@ void main() {
 
       // Assert (AAA Pattern)
       expect(tester.takeException(), isNull);
-      expect(find.text('FloraWand Model S1'), findsOneWidget);
-      expect(find.text('92% PWR'), findsOneWidget);
+      expect(find.text('No FloraWand connected'), findsOneWidget);
+      expect(find.text('92% PWR'), findsNothing);
     });
 
     testWidgets('AddPlantScreen renders step tracker and crop profiles', (tester) async {

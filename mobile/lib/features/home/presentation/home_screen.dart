@@ -25,7 +25,7 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final wandState = ref.watch(floraWandNotifierProvider);
+    final wandState = ref.watch(hardwareTelemetryProvider);
     final telemetryAsync = ref.watch(liveTelemetryProvider);
     final plantsAsync = ref.watch(plantListNotifierProvider);
     final scansAsync = ref.watch(recentScansProvider);
@@ -201,32 +201,25 @@ class HomeScreen extends ConsumerWidget {
     List<PlantModel> plants,
   ) {
     final isConnected = wandState.isConnected;
-    final batteryPercent = wandState.telemetry.batteryPercent;
     final activePotLabel = plants.isNotEmpty
         ? 'Active Plot: ${plants.first.name}'
         : 'No registered plots';
 
-    final hasData = isConnected || plants.isNotEmpty || (telemetry != null && (telemetry.soilMoisturePercent > 0 || telemetry.solarRadiationPar > 0));
-    final defaultMoisture = plants.isNotEmpty ? plants.first.soilMoisturePercent : (telemetry?.soilMoisturePercent ?? 0.0);
-    final defaultTemp = plants.isNotEmpty ? plants.first.soilTemperatureCelsius : (telemetry?.soilTemperatureCelsius ?? 0.0);
-    final effectiveMoisture = isConnected ? wandState.telemetry.soilMoisturePercent : (telemetry?.soilMoisturePercent ?? defaultMoisture);
-    final effectiveTemp = isConnected ? wandState.telemetry.temperatureCelsius : (telemetry?.soilTemperatureCelsius ?? defaultTemp);
-    final effectiveHumidity = isConnected ? wandState.telemetry.humidityPercent : (telemetry?.ambientHumidityPercent ?? 55.0);
-    final effectivePar = isConnected ? wandState.telemetry.lightLux : (telemetry?.solarRadiationPar ?? 800.0);
-
-    final moistureVal = hasData ? effectiveMoisture.toStringAsFixed(0) : '--';
-    final moistureProgress = hasData ? (effectiveMoisture / 100.0).clamp(0.0, 1.0) : 0.0;
-
-    final tempVal = hasData ? effectiveTemp.toStringAsFixed(1) : '--';
-    final tempProgress = hasData ? (((effectiveTemp - 10) / 30.0)).clamp(0.0, 1.0) : 0.0;
-
-    final humidityVal = hasData ? effectiveHumidity.toStringAsFixed(0) : '--';
-    final humidityProgress = hasData ? (effectiveHumidity / 100.0).clamp(0.0, 1.0) : 0.0;
-
-    final parVal = hasData
-        ? (effectivePar >= 1000 ? '${(effectivePar / 1000).toStringAsFixed(1)}k' : effectivePar.toStringAsFixed(0))
-        : '--';
-    final parProgress = hasData ? (effectivePar / 1200.0).clamp(0.0, 1.0) : 0.0;
+    final reading = wandState.hasLiveData ? wandState.rawTelemetry : null;
+    final dataLabel = switch (wandState.dataStatus) {
+      FloraWandDataStatus.live => 'Live',
+      FloraWandDataStatus.stale => 'Stale',
+      FloraWandDataStatus.error => 'Error',
+      _ => 'Unavailable',
+    };
+    final moistureVal = reading?.soilMoistureRawAdc.toString() ?? '--';
+    final tempVal = reading?.temperatureCelsius.toStringAsFixed(1) ?? '--';
+    final humidityVal = reading?.humidityPercent.toStringAsFixed(1) ?? '--';
+    final parVal = reading?.lightRawAdc.toString() ?? '--';
+    final moistureProgress = reading == null ? 0.0 : reading.soilMoistureRawAdc / 4095;
+    final tempProgress = reading == null ? 0.0 : (reading.temperatureCelsius + 40) / 120;
+    final humidityProgress = reading == null ? 0.0 : reading.humidityPercent / 100;
+    final parProgress = reading == null ? 0.0 : reading.lightRawAdc / 4095;
 
     return Container(
       width: double.infinity,
@@ -270,7 +263,7 @@ class HomeScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isConnected ? 'FloraWand Connected' : wandState.statusLabel,
+                            wandState.statusLabel,
                             style: AppTypography.headlineSmall.copyWith(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
@@ -305,13 +298,13 @@ class HomeScreen extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(
-                      Icons.battery_charging_full,
+                      Icons.sensors,
                       size: 14,
                       color: AppColors.secondary,
                     ),
                     const SizedBox(width: 3),
                     Text(
-                      '$batteryPercent%',
+                      isConnected ? 'BLE' : 'Offline',
                       style: AppTypography.telemetrySmall.copyWith(
                         fontWeight: FontWeight.w700,
                         fontSize: 11,
@@ -345,11 +338,11 @@ class HomeScreen extends ConsumerWidget {
                 icon: Icons.water_drop,
                 iconColor: AppColors.secondary,
                 label: 'Soil Moist.',
-                statusTag: isConnected ? wandState.telemetry.soilMoistureTag : ((telemetry?.soilMoisturePercent ?? 64) < 25 ? 'Low' : 'Good'),
-                statusBg: isConnected && wandState.telemetry.isMoistureWarning ? AppColors.errorContainer : AppColors.secondaryFixed,
-                statusTextColor: isConnected && wandState.telemetry.isMoistureWarning ? AppColors.onErrorContainer : AppColors.onSecondaryFixedVariant,
+                statusTag: dataLabel,
+                statusBg: AppColors.secondaryFixed,
+                statusTextColor: AppColors.onSecondaryFixedVariant,
                 numericValue: moistureVal,
-                unit: '%',
+                unit: 'raw ADC',
                 progressPercent: moistureProgress,
                 progressColor: AppColors.secondary,
               ),
@@ -357,9 +350,9 @@ class HomeScreen extends ConsumerWidget {
                 icon: Icons.thermostat,
                 iconColor: AppColors.tertiaryContainer,
                 label: 'Air Temp',
-                statusTag: isConnected ? wandState.telemetry.temperatureTag : 'Good',
-                statusBg: isConnected && wandState.telemetry.isTemperatureWarning ? AppColors.errorContainer : AppColors.secondaryFixed,
-                statusTextColor: isConnected && wandState.telemetry.isTemperatureWarning ? AppColors.onErrorContainer : AppColors.onSecondaryFixedVariant,
+                statusTag: dataLabel,
+                statusBg: AppColors.secondaryFixed,
+                statusTextColor: AppColors.onSecondaryFixedVariant,
                 numericValue: tempVal,
                 unit: '°C',
                 progressPercent: tempProgress,
@@ -369,9 +362,9 @@ class HomeScreen extends ConsumerWidget {
                 icon: Icons.cloud,
                 iconColor: AppColors.secondary,
                 label: 'Humidity',
-                statusTag: isConnected ? wandState.telemetry.humidityTag : 'Good',
-                statusBg: isConnected && wandState.telemetry.isHumidityWarning ? AppColors.errorContainer : AppColors.secondaryFixed,
-                statusTextColor: isConnected && wandState.telemetry.isHumidityWarning ? AppColors.onErrorContainer : AppColors.onSecondaryFixedVariant,
+                statusTag: dataLabel,
+                statusBg: AppColors.secondaryFixed,
+                statusTextColor: AppColors.onSecondaryFixedVariant,
                 numericValue: humidityVal,
                 unit: '%',
                 progressPercent: humidityProgress,
@@ -380,12 +373,12 @@ class HomeScreen extends ConsumerWidget {
               _TelemetryMiniCard(
                 icon: Icons.wb_sunny,
                 iconColor: AppColors.tertiaryFixedDim,
-                label: 'Light Lux',
-                statusTag: isConnected ? wandState.telemetry.lightTag : (hasData ? (effectivePar > 600 ? 'Bright' : 'Normal') : 'Standby'),
-                statusBg: isConnected && wandState.telemetry.isLightWarning ? AppColors.errorContainer : AppColors.tertiaryFixed,
-                statusTextColor: isConnected && wandState.telemetry.isLightWarning ? AppColors.onErrorContainer : AppColors.onTertiaryFixed,
+                label: 'Light',
+                statusTag: dataLabel,
+                statusBg: AppColors.secondaryFixed,
+                statusTextColor: AppColors.onSecondaryFixedVariant,
                 numericValue: parVal,
-                unit: hasData ? 'Lux' : '',
+                unit: 'raw ADC',
                 progressPercent: parProgress,
                 progressColor: AppColors.tertiaryFixedDim,
               ),
@@ -396,12 +389,12 @@ class HomeScreen extends ConsumerWidget {
 
           // Read another pot action button (Read-only prompt)
           OutlinedButton.icon(
-            onPressed: () async {
+            onPressed: !isConnected || wandState.isSampling ? null : () async {
               await ref.read(floraWandNotifierProvider.notifier).triggerSample();
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Sensor probe active. Viewing live root-zone telemetry.'),
+                  SnackBar(
+                    content: Text(ref.read(floraWandNotifierProvider).statusLabel),
                     duration: Duration(seconds: 2),
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -1173,27 +1166,31 @@ class _TelemetryMiniCard extends StatelessWidget {
               ),
             ],
           ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                numericValue,
-                style: AppTypography.telemetryLarge.copyWith(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  numericValue,
+                  style: AppTypography.telemetryLarge.copyWith(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 2),
-              Text(
-                unit,
-                style: AppTypography.telemetrySmall.copyWith(
-                  fontSize: 11,
-                  color: AppColors.onSurfaceVariant,
+                const SizedBox(width: 2),
+                Text(
+                  unit,
+                  style: AppTypography.telemetrySmall.copyWith(
+                    fontSize: 11,
+                    color: AppColors.onSurfaceVariant,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           ClipRRect(
             borderRadius: BorderRadius.circular(9999),
