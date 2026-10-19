@@ -4,9 +4,9 @@ import 'flora_wand_state.dart';
 
 class FloraWandGattUuids {
   FloraWandGattUuids._();
-  static final serviceUuid = Guid('0000ff01-0000-1000-8000-00805f9b34fb');
+  static final serviceUuid = Guid('12345678-1234-1234-1234-123456789000');
   static final telemetryCharacteristicUuid = Guid(
-    '0000ff02-0000-1000-8000-00805f9b34fb',
+    '12345678-1234-1234-1234-123456789001',
   );
 }
 
@@ -70,6 +70,8 @@ class FlutterBlueFloraWandTransport implements FloraWandTransport {
     _device = device;
     await device.connect(
       license: License.nonprofit,
+      // The sketch sends text longer than the default 20-byte ATT payload.
+      mtu: 512,
       timeout: const Duration(seconds: 10),
     );
     if (_device != device) {
@@ -96,8 +98,9 @@ class FlutterBlueFloraWandTransport implements FloraWandTransport {
     if (_characteristic == null) {
       throw StateError(
         'ESP32 found, but its firmware does not expose the required FloraWand '
-        'telemetry service (FF01) and notification characteristic (FF02). '
-        'Check the firmware UUIDs or upload the project firmware.',
+        'service 12345678-1234-1234-1234-123456789000 and sensor '
+        'characteristic 12345678-1234-1234-1234-123456789001. '
+        'Select the FloraScan-Wand running your Arduino sketch.',
       );
     }
   }

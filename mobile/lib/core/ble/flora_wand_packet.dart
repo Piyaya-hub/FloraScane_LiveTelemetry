@@ -1,8 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
-/// Phase 1: exactly eight bytes, little endian. No battery or fallback formats.
-/// [0..1] soil ADC uint16; [2..3] Celsius x10 int16;
-/// [4..5] RH percent x10 uint16; [6..7] light ADC uint16.
+/// FloraScan-Wand Arduino sketch: one UTF-8 notification per sensor sample.
+/// Example: moisture=3039,temp=29.7,humidity=75.7,light=80.00.
+/// The sketch formats light as a float (e.g. 1234.00), but it is an ADC count.
 @immutable
 class FloraWandTelemetry {
   const FloraWandTelemetry({
@@ -20,26 +22,44 @@ class FloraWandTelemetry {
   final DateTime receivedAt;
 
   factory FloraWandTelemetry.decode(List<int> packet, DateTime receivedAt) {
-    if (packet.length != 8 || packet.any((b) => b < 0 || b > 255)) {
-      throw const FormatException('Expected exactly eight bytes');
+    if (packet.isEmpty ||
+        packet.length > 128 ||
+        packet.any((b) => b < 0 || b > 255)) {
+      throw const FormatException('Invalid sensor notification');
     }
-    final data = ByteData.sublistView(Uint8List.fromList(packet));
-    final soil = data.getUint16(0, Endian.little);
-    final temperature = data.getInt16(2, Endian.little) / 10.0;
-    final humidity = data.getUint16(4, Endian.little) / 10.0;
-    final light = data.getUint16(6, Endian.little);
-    if (soil > 4095 ||
-        light > 4095 ||
+    final text = utf8.decode(packet).trim();
+    // Match the complete known firmware format. Never fill a missing field
+    // with a default, or interpret a truncated text notification as binary.
+    // Exact decimal precision also rejects a cut-off final light value.
+    final match = RegExp(
+      r'^moisture=(\d+),temp=(-?\d+\.\d),humidity=(\d+\.\d),light=(\d+\.\d{2})$',
+    ).firstMatch(text);
+    if (match == null || match.end != text.length) {
+      throw const FormatException(
+        'Expected complete moisture,temp,humidity,light sensor data',
+      );
+    }
+    final soil = int.tryParse(match.group(1)!);
+    final temperature = double.parse(match.group(2)!);
+    final humidity = double.parse(match.group(3)!);
+    final light = double.parse(match.group(4)!);
+    if (soil == null ||
+        soil > 4095 ||
+        !temperature.isFinite ||
         temperature < -40 ||
         temperature > 80 ||
-        humidity > 100) {
+        !humidity.isFinite ||
+        humidity > 100 ||
+        !light.isFinite ||
+        light > 4095 ||
+        light != light.truncateToDouble()) {
       throw const FormatException('Sensor reading outside ADC/DHT22 range');
     }
     return FloraWandTelemetry(
       soilMoistureRawAdc: soil,
       temperatureCelsius: temperature,
       humidityPercent: humidity,
-      lightRawAdc: light,
+      lightRawAdc: light.toInt(),
       receivedAt: receivedAt,
     );
   }

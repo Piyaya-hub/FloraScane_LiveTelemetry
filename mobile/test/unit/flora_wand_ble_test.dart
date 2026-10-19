@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:florascan_1/core/ble/flora_wand_ble_service.dart';
@@ -16,12 +16,10 @@ List<int> packet({
   int humidity = 687,
   int light = 1234,
 }) {
-  final b = ByteData(8)
-    ..setUint16(0, soil, Endian.little)
-    ..setInt16(2, temp, Endian.little)
-    ..setUint16(4, humidity, Endian.little)
-    ..setUint16(6, light, Endian.little);
-  return b.buffer.asUint8List();
+  return utf8.encode(
+    'moisture=$soil,temp=${(temp / 10).toStringAsFixed(1)},'
+    'humidity=${(humidity / 10).toStringAsFixed(1)},light=${light.toStringAsFixed(2)}',
+  );
 }
 
 class FakeTransport implements FloraWandTransport {
@@ -74,17 +72,47 @@ class FakeTransport implements FloraWandTransport {
 
 void main() {
   final time = DateTime.utc(2026, 10, 19);
-  test('packet decodes raw ADC, signed temperature and humidity tenths', () {
-    final r = FloraWandTelemetry.decode(packet(), time);
-    expect(r.soilMoistureRawAdc, 2200);
-    expect(r.temperatureCelsius, 26.5);
-    expect(r.humidityPercent, 68.7);
-    expect(r.lightRawAdc, 1234);
-    expect(r.receivedAt, time);
+  test('GATT identifiers match the supplied working Arduino sketch', () {
     expect(
-      FloraWandTelemetry.decode(packet(temp: -53), time).temperatureCelsius,
-      -5.3,
+      FloraWandGattUuids.serviceUuid.str,
+      '12345678-1234-1234-1234-123456789000',
     );
+    expect(
+      FloraWandGattUuids.telemetryCharacteristicUuid.str,
+      '12345678-1234-1234-1234-123456789001',
+    );
+  });
+  test('literal sketch notification decodes all four measurements', () {
+    final r = FloraWandTelemetry.decode(
+      utf8.encode('moisture=3039,temp=29.7,humidity=75.7,light=80.00'),
+      time,
+    );
+    expect(r.soilMoistureRawAdc, 3039);
+    expect(r.temperatureCelsius, 29.7);
+    expect(r.humidityPercent, 75.7);
+    expect(r.lightRawAdc, 80);
+  });
+  test(
+    'Arduino text decodes raw ADC, signed Celsius and humidity without rescaling',
+    () {
+      final r = FloraWandTelemetry.decode(packet(), time);
+      expect(r.soilMoistureRawAdc, 2200);
+      expect(r.temperatureCelsius, 26.5);
+      expect(r.humidityPercent, 68.7);
+      expect(r.lightRawAdc, 1234);
+      expect(r.receivedAt, time);
+      expect(
+        FloraWandTelemetry.decode(packet(temp: -53), time).temperatureCelsius,
+        -5.3,
+      );
+    },
+  );
+  test('every truncated prefix of a sketch notification is rejected', () {
+    final bytes = utf8.encode('moisture=3039,temp=29.7,humidity=75.7,light=80.00');
+    for (var length = 0; length < bytes.length; length++) {
+      expect(() => FloraWandTelemetry.decode(bytes.sublist(0, length), time),
+        throwsFormatException);
+    }
   });
   test('inclusive sensor range boundaries', () {
     final r = FloraWandTelemetry.decode(
@@ -101,32 +129,36 @@ void main() {
     expect(upper.temperatureCelsius, 80);
     expect(upper.humidityPercent, 100);
   });
-  test(
-    'rejects malformed, extra, incomplete, text and invalid sensor packets',
-    () {
-      for (final bytes in <List<int>>[
-        [],
-        [1],
-        List.filled(7, 0),
-        List.filled(9, 0),
-        List.filled(16, 0),
-        '2200,26.5,68,900'.codeUnits,
-        [-1, ...List.filled(7, 0)],
-        [256, ...List.filled(7, 0)],
-        packet(soil: 4096),
-        packet(light: 65535),
-        packet(temp: -401),
-        packet(temp: 801),
-        packet(temp: 32767),
-        packet(humidity: 1001),
-      ]) {
-        expect(
-          () => FloraWandTelemetry.decode(bytes, time),
-          throwsFormatException,
-        );
-      }
-    },
-  );
+  test('rejects malformed, incomplete, binary and invalid sensor packets', () {
+    for (final bytes in <List<int>>[
+      [],
+      [1],
+      List.filled(7, 0),
+      List.filled(9, 0),
+      List.filled(16, 0),
+      '2200,26.5,68,900'.codeUnits,
+      'Waiting for sensor data...'.codeUnits,
+      'moisture=2200,temp=nan,humidity=nan,light=1234.00'.codeUnits,
+      'moisture=2200,temp=26.5,humidity=68.7'.codeUnits,
+      'moisture=2200,temp=26.5,humidity=68.7,light=1234.00,extra=1'.codeUnits,
+      'moisture=2200,temp=26.5,humidity=68.7,light=12.34'.codeUnits,
+      'moisture=2200,temp=26.5,humidity=-1.0,light=1234.00'.codeUnits,
+      [0xff, 0xfe],
+      [-1, ...List.filled(7, 0)],
+      [256, ...List.filled(7, 0)],
+      packet(soil: 4096),
+      packet(light: 65535),
+      packet(temp: -401),
+      packet(temp: 801),
+      packet(temp: 32767),
+      packet(humidity: 1001),
+    ]) {
+      expect(
+        () => FloraWandTelemetry.decode(bytes, time),
+        throwsFormatException,
+      );
+    }
+  });
   late FakeTransport transport;
   late ProviderContainer container;
   late FloraWandNotifier notifier;
